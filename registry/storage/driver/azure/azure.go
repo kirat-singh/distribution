@@ -36,6 +36,7 @@ const (
 type blobClient interface {
 	GetBlobReference(path string) *azure.Blob
 	GetContainerReference() *azure.Container
+	GetCopySourceURL(blob *azure.Blob) (url string)
 	GetURLFor(blob *azure.Blob, expires time.Time) (url string, err error)
 	CreateContainer() (created bool, err error)
 }
@@ -66,6 +67,10 @@ func (client *simpleBlobClient) GetURLFor(blob *azure.Blob, expires time.Time) (
 			Expiry: expires,
 		},
 	})
+}
+
+func (client *simpleBlobClient) GetCopySourceURL(blob *azure.Blob) (url string) {
+	return blob.GetURL()
 }
 
 type accountSASBlobClient struct {
@@ -124,6 +129,11 @@ func (client *accountSASBlobClient) GetURLFor(blob *azure.Blob, expires time.Tim
 	// we just append the accountSAS token and ignore the expiry
 	blobUrl := blob.GetURL()
 	return blobUrl + "?" + client.accountSASToken, nil
+}
+
+func (client *accountSASBlobClient) GetCopySourceURL(blob *azure.Blob) (url string) {
+	blobUrl := blob.GetURL()
+	return blobUrl + "?" + client.accountSASToken
 }
 
 type driver struct {
@@ -415,7 +425,7 @@ func (d *driver) List(ctx context.Context, path string) ([]string, error) {
 // object.
 func (d *driver) Move(ctx context.Context, sourcePath string, destPath string) error {
 	srcBlobRef := d.client.GetBlobReference(d.blobPath(sourcePath))
-	sourceBlobURL := srcBlobRef.GetURL()
+	sourceBlobURL := d.client.GetCopySourceURL(srcBlobRef)
 	destBlobRef := d.client.GetBlobReference(d.blobPath(destPath))
 	err := destBlobRef.Copy(sourceBlobURL, nil)
 	if err != nil {
